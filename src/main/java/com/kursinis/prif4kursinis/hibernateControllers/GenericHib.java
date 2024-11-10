@@ -4,95 +4,114 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Query;
 import jakarta.persistence.criteria.CriteriaQuery;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class GenericHib {
-    private EntityManagerFactory entityManagerFactory;
-    private EntityManager em;
+
+    private final EntityManagerFactory entityManagerFactory;
+    private static final Logger LOGGER = Logger.getLogger(GenericHib.class.getName());
 
     public GenericHib(EntityManagerFactory entityManagerFactory) {
         this.entityManagerFactory = entityManagerFactory;
     }
 
-    EntityManager getEntityManager() {
+    protected EntityManager getEntityManager() {
         return entityManagerFactory.createEntityManager();
     }
 
-    //<T> indikuos, kad yra generic method. Ka tik padariau visu klasiu create backend metoda
+    protected void closeEntityManager(EntityManager em) {
+        if (em != null && em.isOpen()) {
+            em.close();
+        }
+    }
+
+    private void logError(String message, Exception e) {
+        LOGGER.log(Level.SEVERE, message, e);
+    }
+
     public <T> void create(T entity) {
+        EntityManager em = getEntityManager();
         try {
-            em = getEntityManager();
             em.getTransaction().begin();
             em.persist(entity);
             em.getTransaction().commit();
         } catch (Exception e) {
-            e.printStackTrace();
+            logError("Failed to create entity", e);
+            if (em.getTransaction().isActive()) {
+                em.getTransaction().rollback();
+            }
         } finally {
-            if (em != null) em.close();
+            closeEntityManager(em);
         }
     }
 
-    //Ka tik padariau update visoms esybems
     public <T> void update(T entity) {
+        EntityManager em = getEntityManager();
         try {
-            em = getEntityManager();
             em.getTransaction().begin();
             em.merge(entity);
             em.getTransaction().commit();
         } catch (Exception e) {
-            e.printStackTrace();
+            logError("Failed to update entity", e);
+            if (em.getTransaction().isActive()) {
+                em.getTransaction().rollback();
+            }
         } finally {
-            if (em != null) em.close();
+            closeEntityManager(em);
         }
     }
 
-    //Su delete bus niuansai, kol kas nerasau
     public <T> void delete(Class<T> entityClass, int id) {
-        EntityManager em = null;
+        EntityManager em = getEntityManager();
         try {
-            em = getEntityManager();
-            var transaction =  em.getTransaction();
-            transaction.begin();
-            var object = em.find(entityClass, id);
-            em.remove(object);
-            transaction.commit();
+            em.getTransaction().begin();
+            T entity = em.find(entityClass, id);
+            if (entity != null) {
+                em.remove(entity);
+                em.getTransaction().commit();
+            } else {
+                LOGGER.log(Level.WARNING, "Entity with ID {0} not found for deletion", id);
+                em.getTransaction().rollback();
+            }
         } catch (Exception e) {
-            e.printStackTrace();
+            logError("Failed to delete entity", e);
+            if (em.getTransaction().isActive()) {
+                em.getTransaction().rollback();
+            }
         } finally {
-            if (em != null) em.close();
+            closeEntityManager(em);
         }
     }
 
     public <T> T getEntityById(Class<T> entityClass, int id) {
+        EntityManager em = getEntityManager();
         T result = null;
         try {
-            em = getEntityManager();
-            em.getTransaction().begin();
             result = em.find(entityClass, id);
-            em.getTransaction().commit();
         } catch (Exception e) {
-            e.printStackTrace();
+            logError("Failed to retrieve entity by ID", e);
+        } finally {
+            closeEntityManager(em);
         }
         return result;
     }
 
     public <T> List<T> getAllRecords(Class<T> entityClass) {
-        EntityManager em = null;
+        EntityManager em = getEntityManager();
         List<T> result = new ArrayList<>();
         try {
-            em = getEntityManager();
-            CriteriaQuery<T> query = em.getCriteriaBuilder().createQuery(entityClass); // Specify type parameter
+            CriteriaQuery<T> query = em.getCriteriaBuilder().createQuery(entityClass);
             query.select(query.from(entityClass));
             Query q = em.createQuery(query);
             result = q.getResultList();
         } catch (Exception e) {
-            e.printStackTrace();
+            logError("Failed to retrieve all records", e);
         } finally {
-            if (em != null) em.close();
+            closeEntityManager(em);
         }
         return result;
     }
-
 }

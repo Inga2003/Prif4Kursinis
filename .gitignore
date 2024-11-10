@@ -41,3 +41,5 @@ build/
 /codemr/Prif4Kursinis 1/html/
 /codemr/Prif4Kursinis 2/html/
 /out/
+# Project exclude paths
+/codemr/Prif4Kursinis 3/html/
